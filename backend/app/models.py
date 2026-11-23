@@ -627,6 +627,69 @@ class CostRecord:
 
 
 @dataclass
+class ReconLine:
+    """对账清单行：一个来源作业在一个原始账期的应结费用。"""
+    job_id: str
+    original_period: str          # 原始账期（采集核算账期）
+    requests: int
+    amount: float
+    source: str                   # 原账 / 补采
+    receipt_id: str = ""          # 补采回执编号（原账行为空）
+
+    def to_row(self) -> dict[str, Any]:
+        return {
+            "来源作业": self.job_id, "原始账期": self.original_period,
+            "请求次数": self.requests, "金额": self.amount,
+            "费用来源": self.source, "补采回执": self.receipt_id,
+        }
+
+
+@dataclass
+class ReconciliationList:
+    """对账清单：月底开账的原账清单或补差复核清单，是财务签收的结账依据。
+
+    清单一经发出即冻结明细：已签（含待签收）清单和金额依旧有效，
+    迟到补采不回溯修改，只能计入后续账期的复核清单。
+    """
+    serial_no: str                # 清单实际序号
+    kind: str                     # 原账清单 / 复核清单
+    billing_period: str           # 开账账期（清单归属的结账账期）
+    original_period: str          # 原始账期（复核清单=差额来源账期；原账清单=开账账期本身）
+    lines: list[ReconLine] = field(default_factory=list)
+    status: str = "待签收"         # 待签收 / 已签收
+    issued_by: str = ""
+    issued_at: str = ""
+    sent_to: str = ""             # 签收人（审核人 / 财务）
+    signed_by: str = ""
+    signed_at: str = ""
+
+    @property
+    def total_requests(self) -> int:
+        return sum(line.requests for line in self.lines)
+
+    @property
+    def total_amount(self) -> float:
+        return round(sum(line.amount for line in self.lines), 2)
+
+
+@dataclass
+class SupplementReceipt:
+    """迟到补采回执：已开账账期的迟到用量，按回执编号幂等入账。
+
+    补差始终可溯源：原采集账期、来源作业、回执编号随记录保留。
+    """
+    receipt_id: str
+    job_id: str
+    requests: int
+    original_period: str          # 原采集账期
+    received_at: str = ""
+    amount: float = 0.0
+    target_period: str = ""       # 入账账期（账期变动去向）
+    status: str = "已入账"         # 已入账 / 重复忽略
+    review_list_serial: str = ""  # 关联复核清单
+
+
+@dataclass
 class ArchivePolicy:
     """数据归档策略：data_archive 管理，定期归档批次存储数据。"""
     policy_id: str
